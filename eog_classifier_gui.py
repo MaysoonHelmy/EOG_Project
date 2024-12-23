@@ -17,6 +17,7 @@ class EOGClassifierApp:
         self.data = None
         self.labels = None
         self.test_data = None
+        self.test_label = None
         self.setup_styles()
         self.create_layout()
 
@@ -74,27 +75,20 @@ class EOGClassifierApp:
 
         ttk.Button(
             dataset_frame,
-            text="Load Training Data",
-            command=self.load_training_data,
+            text="Load Training Data (Right)",
+            command=lambda: self.load_training_data("Right"),
             style="Action.TButton"
         ).pack(fill=tk.X, pady=2)
 
-        self.label_var = tk.StringVar(value="Left")
-        label_frame = ttk.Frame(dataset_frame)
-        label_frame.pack(fill=tk.X, pady=5)
-        ttk.Label(label_frame, text="Label:").pack(side=tk.LEFT)
-        ttk.Entry(label_frame, textvariable=self.label_var).pack(side=tk.LEFT, padx=5)
+        ttk.Button(
+            dataset_frame,
+            text="Load Training Data (Left)",
+            command=lambda: self.load_training_data("Left"),
+            style="Action.TButton"
+        ).pack(fill=tk.X, pady=2)
 
         model_frame = ttk.LabelFrame(panel, text="Model", padding=10)
         model_frame.pack(fill=tk.X, padx=10, pady=5)
-
-        self.model_var = tk.StringVar(value="KNN")
-        ttk.Combobox(
-            model_frame,
-            textvariable=self.model_var,
-            values=["KNN"],
-            state="readonly"
-        ).pack(fill=tk.X, pady=2)
 
         ttk.Button(
             model_frame,
@@ -108,13 +102,28 @@ class EOGClassifierApp:
 
         ttk.Button(
             test_frame,
-            text="Load and Predict Test Data",
-            command=self.load_and_predict_test_data,
+            text="Load Test Data",
+            command=self.load_test_data,
             style="Action.TButton"
         ).pack(fill=tk.X, pady=2)
 
-        self.results_text = tk.Text(panel, height=15, width=40)
-        self.results_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        ttk.Button(
+            test_frame,
+            text="Predict",
+            command=self.predict,
+            style="Action.TButton"
+        ).pack(fill=tk.X, pady=2)
+
+        # Scrollable text log
+        log_frame = ttk.Frame(panel)
+        log_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+
+        self.results_text = tk.Text(log_frame, height=15, width=60, wrap=tk.WORD)
+        self.results_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.results_text.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.results_text.config(yscrollcommand=scrollbar.set)
 
         return panel
 
@@ -131,52 +140,65 @@ class EOGClassifierApp:
 
         return panel
 
-    def load_training_data(self):
-        filename = filedialog.askopenfilename(title="Select Training Data")
+    def load_training_data(self, label):
+        filename = filedialog.askopenfilename(title=f"Select Training Data ({label})")
         if filename:
-            self.data = self.classifier.load_data(filename)
-            self.plot_signal(self.data, "Raw Training Signal")
-            preprocessed_data = self.classifier.preprocess_signal(self.data)
-            self.plot_preprocessed_signal(preprocessed_data, "Preprocessed Training Signal")
+            data = self.classifier.load_data(filename)
+            num_samples = len(data)
+            self.classifier.set_labels(label, num_samples)
+            if self.data is None:
+                self.data = data
+                self.labels = np.array([label] * len(data))
+            else:
+                self.data = np.vstack((self.data, data))
+                self.labels = np.concatenate((self.labels, np.array([label] * len(data))))
+            self.plot_signal(data, f"Raw Training Signal ({label})")
+            messagebox.showinfo("Success", f"Training data for {label} loaded successfully")
 
-            label = self.label_var.get()
-            self.labels = [label] * len(self.data)
-            self.classifier.data = self.data
-            self.classifier.set_labels(label, len(self.data))
-            messagebox.showinfo("Success", "Training data loaded successfully")
-
-    def load_and_predict_test_data(self):
+    def load_test_data(self):
         filename = filedialog.askopenfilename(title="Select Test Data")
         if filename:
             self.test_data = self.classifier.load_data(filename)
             self.plot_signal(self.test_data, "Raw Test Signal")
-            preprocessed_data = self.classifier.preprocess_signal(self.test_data)
-            self.plot_preprocessed_signal(preprocessed_data, "Preprocessed Test Signal")
-
-            try:
-                predictions = self.classifier.predict(self.test_data)
-                accuracy = accuracy_score(predictions, predictions)  
-                self.results_text.delete(1.0, tk.END)
-                self.results_text.insert(tk.END, f"Predictions: {predictions}\n")
-                self.results_text.insert(tk.END, f"Accuracy: {accuracy:.2f}\n")
-            except Exception as e:
-                messagebox.showerror("Error", f"Prediction failed: {e}")
+            messagebox.showinfo("Success", "Test data loaded successfully")
 
     def train_model(self):
         try:
             if self.data is not None and self.labels is not None:
-                if len(self.data) < 5:  # Ensure enough samples for KNN
-                    messagebox.showerror(
-                        "Error",
-                        "Insufficient training samples. Ensure you have at least 5 samples."
-                    )
-                    return
-
-                accuracy = self.classifier.train_model()
-                self.results_text.delete(1.0, tk.END)
+                accuracy, preprocessed_data = self.classifier.train_model(self.data, self.labels)
+                self.results_text.insert(tk.END, f"Model trained successfully!\n")
                 self.results_text.insert(tk.END, f"Training Accuracy: {accuracy:.2f}\n")
+
+                # Train Classification Report
+                train_report = classification_report(self.labels, self.classifier.predict(self.data), target_names=np.unique(self.labels).astype(str))
+                self.results_text.insert(tk.END, f"Training Classification Report:\n{train_report}\n")
+
+                self.plot_signal(self.data, "Raw Training Signal")
+                self.plot_preprocessed_signal(preprocessed_data, "Preprocessed Signal")
             else:
-                messagebox.showerror("Error", "Training data and labels are not set.")
+                messagebox.showerror("Error", "No training data loaded.")
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
+
+    def predict(self):
+        try:
+            if self.test_data is not None:
+                # Make predictions
+                predictions = self.classifier.predict(self.test_data)
+                self.results_text.insert(tk.END, f"Predictions: {predictions}\n")
+
+                # Calculate test accuracy and classification report
+                if self.test_label is not None:
+                    test_accuracy = accuracy_score(self.test_label, predictions)
+                    self.results_text.insert(tk.END, f"Test Accuracy: {test_accuracy:.2f}\n")
+
+                    # Test Classification Report
+                    test_report = classification_report(self.test_label, predictions, target_names=np.unique(self.test_label).astype(str))
+                    self.results_text.insert(tk.END, f"Test Classification Report:\n{test_report}\n")
+                else:
+                    self.results_text.insert(tk.END, "Test labels are not provided.\n")
+            else:
+                messagebox.showerror("Error", "Test data is not loaded.")
         except Exception as e:
             messagebox.showerror("Error", str(e))
 
