@@ -12,6 +12,7 @@ Purpose: remove high frequencies before down sampling
 
 Feature Extraction
 Purpose: Decompose signals into components at different frequency bands
+Wavelet Family : db4
 Levels: 4 levels to get the range from 0.5 to 20
 
 Final KNN Model Result 
