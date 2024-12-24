@@ -3,7 +3,7 @@ from tkinter import filedialog, ttk, messagebox
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import  classification_report
 
 from Project import EOGClassifier
 
@@ -11,7 +11,7 @@ class EOGClassifierApp:
     def __init__(self, root, classifier):
         self.root = root
         self.root.title("EOG Signal Classifier")
-        self.root.geometry("1970x800")
+        self.root.geometry("1970x900")
 
         self.classifier = classifier
         self.data = None

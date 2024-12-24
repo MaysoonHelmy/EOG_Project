@@ -1,10 +1,8 @@
 import numpy as np
 import pywt
 from scipy import signal
-from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import KNeighborsClassifier
-import matplotlib.pyplot as plt
 
 class EOGClassifier:
     def __init__(self, sampling_rate=176):
