@@ -1,14 +1,11 @@
 Preprocessing
 - DC Removal
-Subtract the mean of each signal to center it around zero
-Purpose : To reduce the sharpening of the signal
+Subtract the mean of each signal to center it around zero , To reduce the sharpening of the signal
 - Bandpass Filtering
 Apply a Butterworth filter to retain frequencies between 0.5 Hz and 20 Hz, removing noise and irrelevant components.
 - Normalization
 Scaling from 0 to 1
-- Resampling
-We apply low pass filter first then Down Sampling
-Purpose: remove high frequencies before down sampling
+- Resampling by downsampling , remove high frequencies before down sampling by low pass filter
 
 Feature Extraction
 - Purpose: Decompose signals into components at different frequency bands
@@ -16,5 +13,5 @@ Feature Extraction
 - Levels: 4 levels to get the range from 0.5 to 20
 
 Final KNN Model Result 
-Training Accuracy : 100 % ,
-Test Accuracy : 90 %
+- Training Accuracy : 100 % ,
+- Test Accuracy : 90 %
