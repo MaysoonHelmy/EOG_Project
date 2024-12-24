@@ -4,11 +4,10 @@ from scipy import signal
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 
 class EOGClassifier:
-    def __init__(self, sampling_rate=256):
+    def __init__(self, sampling_rate=176):
         self.data = None
         self.labels = None
         self.features = None
@@ -19,21 +18,73 @@ class EOGClassifier:
         self.wavelet_families = ['db1', 'db2', 'db3', 'db4']
         self.is_trained = False
 
-    def preprocess_signal(self, data):
-        """Preprocess the raw signals by applying mean removal, bandpass filtering, and normalization."""
+    def normalize_signal(self, data):
+        """Normalize the signal to [0, 1] range."""
+        normalized_data = np.zeros_like(data)
+        for i in range(data.shape[0]):
+            signal = data[i]
+            min_val = np.min(signal)
+            max_val = np.max(signal)
+            if max_val - min_val == 0:
+                normalized_data[i] = np.zeros_like(signal)
+            else:
+                normalized_data[i] = (signal - min_val) / (max_val - min_val)
+        return normalized_data
+
+    def preprocess_signal(self, data, target_sampling_rate=64):
+        """Preprocess the raw signals by applying mean removal, bandpass filtering, normalization, and either upsampling or downsampling."""
         # DC removal
         data = data - np.mean(data, axis=1, keepdims=True)
 
-        # Bandpass filter (0.5-20 Hz)
+        # Bandpass filter (0.5-20 Hz) - Applying bandpass filter before upsampling or downsampling
         nyquist = self.sampling_rate / 2
-        low, high = 0.5 / nyquist, 20 / nyquist
+        low, high = 0.5 / nyquist, 20 / nyquist  # Normalized cutoff frequency (between 0 and 1)
         b, a = signal.butter(4, [low, high], btype='band')
         filtered_data = np.apply_along_axis(lambda x: signal.filtfilt(b, a, x), 1, data)
 
-        # Normalize
-        normalized_data = (filtered_data - filtered_data.mean(axis=1, keepdims=True)) / (filtered_data.std(axis=1, keepdims=True) + 1e-8)
+        if self.sampling_rate < target_sampling_rate:
+            # Upsampling Logic
+            upsample_factor = int(target_sampling_rate / self.sampling_rate)
 
-        return normalized_data
+            # Apply a low-pass filter to prevent aliasing before upsampling
+            nyquist_upsampled = target_sampling_rate / 2
+            low_pass_cutoff = nyquist_upsampled / self.sampling_rate
+
+            # Ensure that the cutoff is within the valid range (0 < cutoff < 1)
+            if low_pass_cutoff <= 0 or low_pass_cutoff >= 1:
+                low_pass_cutoff = 0.99  # Set to a safe value close to Nyquist to prevent aliasing
+
+            b_low, a_low = signal.butter(4, low_pass_cutoff, btype='low')
+            filtered_for_upsampling = np.apply_along_axis(lambda x: signal.filtfilt(b_low, a_low, x), 1, filtered_data)
+
+            # Upsample by interpolating between original samples
+            upsampled_data = np.apply_along_axis(lambda x: np.interp(np.arange(0, len(x), 1/upsample_factor), np.arange(0, len(x)), x), 1, filtered_for_upsampling)
+
+            return self.normalize_signal(upsampled_data)
+
+        elif self.sampling_rate > target_sampling_rate:
+            # Downsampling Logic
+            downsample_factor = int(self.sampling_rate / target_sampling_rate)
+
+            # Apply a low-pass filter to prevent aliasing before downsampling
+            nyquist_downsampled = target_sampling_rate / 2
+            low_pass_cutoff = nyquist_downsampled / self.sampling_rate
+
+            # Ensure that the cutoff is within the valid range (0 < cutoff < 1)
+            if low_pass_cutoff <= 0 or low_pass_cutoff >= 1:
+                low_pass_cutoff = 0.99  # Set to a safe value close to Nyquist to prevent aliasing
+
+            b_low, a_low = signal.butter(4, low_pass_cutoff, btype='low')
+            filtered_for_downsampling = np.apply_along_axis(lambda x: signal.filtfilt(b_low, a_low, x), 1, filtered_data)
+
+            # Downsample by picking every nth sample
+            downsampled_data = filtered_for_downsampling[:, ::downsample_factor]
+
+            return self.normalize_signal(downsampled_data)
+
+        else:
+            # If the target_sampling_rate is equal to the original sampling rate, just normalize the data
+            return self.normalize_signal(filtered_data)
 
     def extract_features(self, data):
         """Extract wavelet-based features from the signals."""
@@ -41,7 +92,7 @@ class EOGClassifier:
         for signal in data:
             signal_features = []
             for wavelet in self.wavelet_families:
-                coeffs = pywt.wavedec(signal, wavelet, level=2)
+                coeffs = pywt.wavedec(signal, wavelet, level=4)
                 for coeff in coeffs:
                     signal_features.extend([np.mean(coeff), np.std(coeff), np.max(coeff), np.min(coeff)])
             features.append(signal_features)
@@ -73,26 +124,20 @@ class EOGClassifier:
         preprocessed_data = self.preprocess_signal(data)
         features = self.extract_features(preprocessed_data)
 
-        if not self.scaler or not self.label_encoder or not self.model:
-            raise ValueError("Scaler, LabelEncoder, or Model is not initialized.")
-
         # Fit the scaler and transform features
         self.scaler.fit(features)
         scaled_features = self.scaler.transform(features)
 
-        # Fit the label encoder with all unique labels
-        self.label_encoder.fit(np.unique(labels))
-
         # Encode labels
+        self.label_encoder.fit(np.unique(labels))
         encoded_labels = self.label_encoder.transform(labels)
 
         # Train the KNN model
         self.model.fit(scaled_features, encoded_labels)
         self.is_trained = True
 
-        # Evaluate accuracy
+        # Return model accuracy
         accuracy = self.model.score(scaled_features, encoded_labels)
-
         return accuracy, preprocessed_data
 
     def predict(self, test_data):
@@ -100,38 +145,16 @@ class EOGClassifier:
         if not self.is_trained:
             raise ValueError("Model must be trained before making predictions.")
 
-        if not self.scaler or not self.label_encoder or not self.model:
-            raise ValueError("Scaler, LabelEncoder, or Model is not initialized.")
-
-        # Preprocess and extract features from test data
+        # Preprocess and extract features
         preprocessed_data = self.preprocess_signal(test_data)
         features = self.extract_features(preprocessed_data)
         scaled_features = self.scaler.transform(features)
 
-        try:
-            # Predict using the trained KNN model
-            predictions = self.model.predict(scaled_features)
-
-            # Decode labels
-            if hasattr(self.label_encoder, "classes_"):
-                decoded_predictions = self.label_encoder.inverse_transform(predictions)
-            else:
-                raise ValueError("LabelEncoder is not fitted properly.")
-
-            return decoded_predictions
-        except Exception as e:
-            raise ValueError(f"Prediction error: {e}")
+        predictions = self.model.predict(scaled_features)
+        decoded_predictions = self.label_encoder.inverse_transform(predictions)
+        return decoded_predictions
 
     def evaluate_model(self, test_data, true_labels):
         """Evaluate the model on test data."""
         predictions = self.predict(test_data)
-        accuracy = accuracy_score(true_labels, predictions)
-        report = classification_report(true_labels, predictions, target_names=np.unique(true_labels).astype(str))
-        cm = confusion_matrix(true_labels, predictions)
-
-        print("Test Accuracy: {:.2f}".format(accuracy))
-        print("Classification Report:\n", report)
-        print("Confusion Matrix:\n", cm)
-
-        return accuracy, report, cm
-
+        return predictions  # Only return predictions, excluding accuracy and other metrics

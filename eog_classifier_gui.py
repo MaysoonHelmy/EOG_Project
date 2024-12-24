@@ -11,7 +11,7 @@ class EOGClassifierApp:
     def __init__(self, root, classifier):
         self.root = root
         self.root.title("EOG Signal Classifier")
-        self.root.geometry("1200x800")
+        self.root.geometry("1970x800")
 
         self.classifier = classifier
         self.data = None
@@ -185,18 +185,13 @@ class EOGClassifierApp:
             if self.test_data is not None:
                 # Make predictions
                 predictions = self.classifier.predict(self.test_data)
+
+                # Display only the predictions in a clear way
                 self.results_text.insert(tk.END, f"Predictions: {predictions}\n")
 
-                # Calculate test accuracy and classification report
-                if self.test_label is not None:
-                    test_accuracy = accuracy_score(self.test_label, predictions)
-                    self.results_text.insert(tk.END, f"Test Accuracy: {test_accuracy:.2f}\n")
-
-                    # Test Classification Report
-                    test_report = classification_report(self.test_label, predictions, target_names=np.unique(self.test_label).astype(str))
-                    self.results_text.insert(tk.END, f"Test Classification Report:\n{test_report}\n")
-                else:
-                    self.results_text.insert(tk.END, "Test labels are not provided.\n")
+                # Visualize the prediction results
+                self.plot_signal(self.test_data, "Raw Test Signal")
+                self.results_text.insert(tk.END, f"Prediction completed.\n")
             else:
                 messagebox.showerror("Error", "Test data is not loaded.")
         except Exception as e:
