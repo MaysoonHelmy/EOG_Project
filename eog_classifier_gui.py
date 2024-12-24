@@ -153,14 +153,14 @@ class EOGClassifierApp:
                 self.data = np.vstack((self.data, data))
                 self.labels = np.concatenate((self.labels, np.array([label] * len(data))))
             self.plot_signal(data, f"Raw Training Signal ({label})")
-            messagebox.showinfo("Success", f"Training data for {label} loaded successfully")
+            #messagebox.showinfo("Success", f"Training data for {label} loaded successfully")
 
     def load_test_data(self):
         filename = filedialog.askopenfilename(title="Select Test Data")
         if filename:
             self.test_data = self.classifier.load_data(filename)
             self.plot_signal(self.test_data, "Raw Test Signal")
-            messagebox.showinfo("Success", "Test data loaded successfully")
+            #messagebox.showinfo("Success", "Test data loaded successfully")
 
     def train_model(self):
         try:
@@ -183,13 +183,8 @@ class EOGClassifierApp:
     def predict(self):
         try:
             if self.test_data is not None:
-                # Make predictions
                 predictions = self.classifier.predict(self.test_data)
-
-                # Display only the predictions in a clear way
                 self.results_text.insert(tk.END, f"Predictions: {predictions}\n")
-
-                # Visualize the prediction results
                 self.plot_signal(self.test_data, "Raw Test Signal")
                 self.results_text.insert(tk.END, f"Prediction completed.\n")
             else:

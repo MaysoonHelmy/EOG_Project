@@ -17,7 +17,6 @@ class EOGClassifier:
         self.is_trained = False
 
     def normalize_signal(self, data):
-        """Normalize the signal to [0, 1] range."""
         normalized_data = np.zeros_like(data)
         for i in range(data.shape[0]):
             signal = data[i]
@@ -30,32 +29,33 @@ class EOGClassifier:
         return normalized_data
 
     def preprocess_signal(self, data, target_sampling_rate=64):
-    
+        # Remove DC component (remove mean)
         data = data - np.mean(data, axis=1, keepdims=True)
 
+        # Apply bandpass filter (0.5 - 20 Hz)
         nyquist = self.sampling_rate / 2
         low, high = 0.5 / nyquist, 20 / nyquist 
         b, a = signal.butter(4, [low, high], btype='band')
         filtered_data = np.apply_along_axis(lambda x: signal.filtfilt(b, a, x), 1, data)
 
-        
-
+        # Calculate the M
         downsample_factor = int(self.sampling_rate / target_sampling_rate)
 
+        # Apply Low pass filter to avoid aliasing
         nyquist_downsampled = target_sampling_rate / 2
         low_pass_cutoff = nyquist_downsampled / self.sampling_rate
 
+        # Error handling for low_pass_cutoff
         if low_pass_cutoff <= 0 or low_pass_cutoff >= 1:
-            low_pass_cutoff = 0.99  
-
+            low_pass_cutoff = 0.99
         b_low, a_low = signal.butter(4, low_pass_cutoff, btype='low')
         filtered_for_downsampling = np.apply_along_axis(lambda x: signal.filtfilt(b_low, a_low, x), 1, filtered_data)
 
+        # Downsample the Signal
         downsampled_data = filtered_for_downsampling[:, ::downsample_factor]
 
+        # return the normalized signal
         return self.normalize_signal(downsampled_data)
-
-
 
     def extract_features(self, data):
         features = []
